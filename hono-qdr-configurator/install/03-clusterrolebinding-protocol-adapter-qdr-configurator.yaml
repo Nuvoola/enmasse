@@ -1,0 +1,11 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: protocol-adapter-qdr-configurator
+roleRef:
+  name: hono-qdr-configurator
+subjects:
+- kind: ServiceAccount
+  namespace: hono-infra
+  name: hono-protocol-adapter

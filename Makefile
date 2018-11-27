@@ -1,6 +1,6 @@
 TOPDIR=$(dir $(lastword $(MAKEFILE_LIST)))
 BUILD_DIRS     = none-authservice
-DOCKER_DIRS	   = agent topic-forwarder artemis api-server address-space-controller standard-controller keycloak-plugin keycloak-controller router router-metrics mqtt-gateway mqtt-lwt service-broker
+DOCKER_DIRS	   = agent topic-forwarder artemis api-server address-space-controller standard-controller keycloak-plugin keycloak-controller router router-metrics mqtt-gateway mqtt-lwt service-broker hono-qdr-configurator
 FULL_BUILD 	   = true
 DOCKER_REGISTRY ?= docker.io
 OPENSHIFT_PROJECT             ?= $(shell oc project -q)
@@ -10,6 +10,7 @@ OPENSHIFT_MASTER              ?= $(shell oc whoami --show-server=true)
 OPENSHIFT_USE_TLS             ?= true
 OPENSHIFT_REGISTER_API_SERVER ?= false
 
+GO_TARGETS = hono-qdr-configurator/hono-qdr-configurator
 DOCKER_TARGETS = docker_build docker_tag docker_push clean
 BUILD_TARGETS  = init build test package $(DOCKER_TARGETS) coverage
 INSTALLDIR=$(CURDIR)/templates/install
@@ -23,13 +24,18 @@ ifneq ($(strip $(PROJECT_DISPLAY_NAME)),)
 endif
 
 
-all: init build_java docker_build templates
+all: init build_java build_go docker_build templates
 
 templates: docu_html
 	make -C templates
 
 build_java:
 	mvn package -q -B $(MAVEN_ARGS)
+
+build_go: $(GO_TARGETS)
+
+hono-qdr-configurator/hono-qdr-configurator:
+	cd cmd/hono-qdr-configurator && go build -o ../../$@ .
 
 clean_java:
 	mvn -B -q clean
@@ -39,7 +45,7 @@ template_clean:
 
 clean: clean_java docu_htmlclean template_clean
 
-docker_build: build_java
+docker_build: build_java build_go
 
 coverage: java_coverage
 	$(MAKE) FULL_BUILD=$(FULL_BUILD) -C $@ coverage
@@ -92,4 +98,4 @@ docu_check:
 	./scripts/check_docs.sh
 
 
-.PHONY: $(BUILD_TARGETS) $(DOCKER_TARGETS) $(BUILD_DIRS) $(DOCKER_DIRS) build_java systemtests clean_java docu_html docu_swagger docu_htmlclean docu_check
+.PHONY: $(BUILD_TARGETS) $(GO_TARGETS) $(DOCKER_TARGETS) $(BUILD_DIRS) $(DOCKER_DIRS) build_java build_go systemtests clean_java docu_html docu_swagger docu_htmlclean docu_check

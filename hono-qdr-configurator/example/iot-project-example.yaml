@@ -1,0 +1,10 @@
+---
+kind: IoTProject
+apiVersion: iot.enmasse.io/v1alpha1
+metadata:
+  name: default
+spec:
+  host: messaging-hono-default.enmasse-infra.svc
+  port: 5672
+  username: http
+  password: http-secret
