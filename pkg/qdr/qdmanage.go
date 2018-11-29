@@ -48,13 +48,15 @@ func (m *Manage) Manage(operation string, attributes map[string]string) (string,
         args = append(args, k+"="+v)
     }
 
-    klog.Infof("Call with args: %v - %v", m.Command, args)
+    klog.V(1).Infof("Call with args: %v - %v", m.Command, args)
 
     cmd := exec.Command(m.Command, args...)
     cmd.Stderr = os.Stderr
 
     out, err := cmd.Output()
     text := string(out)
+
+    klog.V(2).Infof("Command output: %v", text)
 
     if _, ok := err.(*exec.ExitError); ok {
         if strings.HasPrefix(text, "NotFoundStatus:") {

@@ -71,8 +71,9 @@ type Connector struct {
     Host         string `json:"host"`
     Port         string `json:"port"` // yes, port is a string, as it could be a named port
     Role         string `json:"role"`
-    SASLUsername string `json:"saslUsername"`
-    SASLPassword string `json:"saslPassword"`
+    SASLUsername string `json:"saslUsername,omitempty"`
+    SASLPassword string `json:"saslPassword,omitempty"`
+    SSLProfile   string `json:"sslProfile,omitempty"`
 }
 
 func (r Connector) GetType() string {
@@ -83,7 +84,7 @@ func (r Connector) GetType() string {
 
 type SslProfile struct {
     NamedResource
-    CertificatePath string `json:"certFile"`
+    CertificatePath string `json:"certFile,omitempty"`
 }
 
 func (r SslProfile) GetType() string {

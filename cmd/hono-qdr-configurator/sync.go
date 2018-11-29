@@ -41,12 +41,12 @@ func (c *Configurator) syncResourceWithCreator(currentPointer interface{}, resou
     }
 
     klog.V(4).Infof("Found: %v", found)
-    klog.V(4).Infof("Current: %v", currentPointer)
-    klog.V(4).Infof("Request: %v", resource)
+    klog.V(3).Infof("Current: %v", currentPointer)
+    klog.V(3).Infof("Request: %v", resource)
 
     if found {
         equals := reflect.DeepEqual(currentPointer, resource)
-        klog.V(4).Infof("Equals: %v", equals)
+        klog.V(2).Infof("Resource equals: %v", equals)
         if equals {
             return false, nil
         }
@@ -95,16 +95,20 @@ func (c *Configurator) certificatePath(object metav1.Object, certificate []byte)
         return ""
     }
 
+    // TODO: don't put all certs into a single folder
+
     checksum := fmt.Sprintf("%x", sha256.Sum256(certificate))
     name := certFilePrefix(object) + checksum + "-cert.crt"
-    return path.Join(c.writableCertificatePath, name)
+    return path.Join(c.ephermalCertBase, name)
 
 }
 
 func (c *Configurator) deleteCertificatesForProject(object metav1.Object) error {
     prefix := certFilePrefix(object)
 
-    files, err := ioutil.ReadDir(c.writableCertificatePath)
+    // TODO: don't put all certs into a single folder
+
+    files, err := ioutil.ReadDir(c.ephermalCertBase)
     if err != nil {
         return err
     }
@@ -112,9 +116,9 @@ func (c *Configurator) deleteCertificatesForProject(object metav1.Object) error 
     klog.Infof("Cleaning up certificates for: %v", object)
 
     for _, f := range files {
-        klog.V(3).Infof("Checking file: %v", f)
+        klog.V(2).Infof("Checking file: %v", f)
         if strings.HasPrefix(f.Name(), prefix) {
-            klog.V(2).Infof("Deleting file: %v", f)
+            klog.Infof("Deleting file: %v", f)
             err = multierr.Append(err, os.Remove(f.Name()))
         }
     }
@@ -123,7 +127,14 @@ func (c *Configurator) deleteCertificatesForProject(object metav1.Object) error 
 }
 
 func resourceName(object metav1.Object, name string) string {
-    return name + "/" + object.GetNamespace() + "." + object.GetName()
+
+    result := name + "-" + object.GetNamespace() + "-" + object.GetName()
+
+    // NOTE: qdrouterd cannot properly handle "." and "/" in resource names
+
+    return strings.
+        NewReplacer(".", "-", "/", "-").
+        Replace(result)
 }
 
 func namedResource(object metav1.Object, name string) qdr.NamedResource {
@@ -167,23 +178,39 @@ func toMapStringString(v interface{}) (map[string]string, error) {
 
 func (c *Configurator) syncSslProfile(object metav1.Object, certificate []byte) (bool, error) {
 
-    certFile := c.certificatePath(object, certificate)
-    klog.Infof("Certificate path: %v", certFile)
+    hasCert := len(certificate) > 0;
+    if hasCert && c.ephermalCertBase == "" {
+        return false, fmt.Errorf("unable to configure custom certificate, emphermal base directory is not configured")
+    }
 
-    if !fileExists(certFile) {
-        // cert file currently does not exists, write to file system
-        if err := ioutil.WriteFile(certFile, certificate, 0777); err != nil {
+    certFile := c.certificatePath(object, certificate)
+    klog.V(2).Infof("Certificate path: %v", certFile)
+
+    if !hasCert && c.ephermalCertBase != "" {
+
+        // TODO: improve performance, we iterate over all custom certs at this point
+
+        // delete all certificates for this project
+        if err := c.deleteCertificatesForProject(object); err != nil {
             return false, err
         }
-        // delete all other certificates for this project
+
+    } else if hasCert && !fileExists(certFile) {
+
+        // delete all certificates for this project
         if err := c.deleteCertificatesForProject(object); err != nil {
+            return false, err
+        }
+
+        // cert file currently does not exists, write to file system
+        if err := ioutil.WriteFile(certFile, certificate, 0777); err != nil {
             return false, err
         }
     }
 
     // sync with qdr
 
-    return c.syncResource(&qdr.SslProfile{}, qdr.SslProfile{
+    return c.syncResource(&qdr.SslProfile{}, &qdr.SslProfile{
         NamedResource:   namedResource(object, "sslProfile"),
         CertificatePath: certFile,
     })
@@ -194,6 +221,7 @@ func (c *Configurator) syncProjectExternalDownstream(project *v1alpha1.IoTProjec
     strategy := project.Spec.DownstreamStrategy.ExternalDownstreamStrategy
 
     connectorName := resourceName(project, "connector")
+    sslProfileName := ""
 
     klog.V(2).Infof("Create project: %v", project)
 
@@ -203,6 +231,7 @@ func (c *Configurator) syncProjectExternalDownstream(project *v1alpha1.IoTProjec
         m.Run(func() (b bool, e error) {
             return c.syncSslProfile(project, strategy.Certificate)
         })
+        sslProfileName = resourceName(project, "sslProfile")
     }
 
     m.Run(func() (b bool, e error) {
@@ -213,6 +242,7 @@ func (c *Configurator) syncProjectExternalDownstream(project *v1alpha1.IoTProjec
             Role:          "route-container",
             SASLUsername:  strategy.Username,
             SASLPassword:  strategy.Password,
+            SSLProfile:    sslProfileName,
         })
     })
 

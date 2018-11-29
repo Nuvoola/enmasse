@@ -7,11 +7,10 @@ package main
 
 import (
     "flag"
-    "k8s.io/client-go/rest"
-    "os"
-
     iot "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned"
     "github.com/enmasseproject/enmasse/pkg/signals"
+    "k8s.io/client-go/rest"
+    "os"
 
     "k8s.io/client-go/kubernetes"
     "k8s.io/klog"
@@ -22,20 +21,60 @@ import (
 )
 
 var (
-    masterURL  string
-    kubeconfig string
+    ephermalCertBase string
 )
 
-func main() {
+func initLog() {
+
+    // private copy of klog flags, as they collide with glog and would panic
+
+    var flags flag.FlagSet
+    klog.InitFlags(&flags)
+
+    // parse main arguments
+
     flag.Parse()
 
-    // init log system
+    // copy over verbose flag from main app to klog
+
+    v := os.Getenv("VERBOSE")
+
+    // if we have a setting, copy over to klog flags
+
+    if v != "" {
+        if err := flags.Set("v", v); err != nil {
+            klog.Fatalf("klog init: Failed to set log verbosity: %v", err.Error())
+        }
+    }
+
+    // setup klog output
+
     klog.SetOutput(os.Stdout)
+}
+
+func main() {
+
+    // init log system
+    initLog()
 
     // install signal handler for graceful shutdown, or hard exit
     stopCh := signals.InstallSignalHandler()
 
     klog.Infof("Starting up...")
+    klog.V(1).Info("Verbosity 1")
+    klog.V(2).Info("Verbosity 2")
+    klog.V(3).Info("Verbosity 3")
+    klog.V(4).Info("Verbosity 4")
+
+    if ephermalCertBase != "" {
+        fi, err := os.Stat(ephermalCertBase)
+        if err != nil {
+            klog.Fatalf("Emphermal certificate base is configured, but unable to access: %v", err.Error())
+        }
+        if !fi.IsDir() {
+            klog.Fatalln("Emphermal certificate base is configured, but is not a directory")
+        }
+    }
 
     cfg, err := rest.InClusterConfig()
     if err != nil {
@@ -57,6 +96,7 @@ func main() {
     configurator := NewConfigurator(
         kubeClient, iotClient,
         iotInformerFactory.Iot().V1alpha1().IoTProjects(),
+        ephermalCertBase,
     )
 
     iotInformerFactory.Start(stopCh)
@@ -64,4 +104,14 @@ func main() {
     if err = configurator.Run(2, stopCh); err != nil {
         klog.Fatalf("Failed running configurator: %v", err.Error())
     }
+}
+
+func init() {
+
+    ephermalCertBase = "/var/qdr-certs"
+
+    if value, present := os.LookupEnv("EPHERMAL_CERT_BASE"); present {
+        ephermalCertBase = value
+    }
+
 }

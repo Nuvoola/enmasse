@@ -30,7 +30,7 @@ import (
 )
 
 type Configurator struct {
-    writableCertificatePath string
+    ephermalCertBase string
 
     kubeclientset kubernetes.Interface
     iotclientset  clientset.Interface
@@ -46,17 +46,20 @@ type Configurator struct {
 func NewConfigurator(
     kubeclientset kubernetes.Interface,
     iotclientset clientset.Interface,
-    projectInformer informers.IoTProjectInformer) *Configurator {
+    projectInformer informers.IoTProjectInformer,
+    ephermalCertBase string,
+) *Configurator {
 
     utilruntime.Must(iotscheme.AddToScheme(scheme.Scheme))
 
     controller := &Configurator{
-        kubeclientset:  kubeclientset,
-        iotclientset:   iotclientset,
-        projectLister:  projectInformer.Lister(),
-        projectsSynced: projectInformer.Informer().HasSynced,
-        workqueue:      workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "IoTProjects"),
-        manage:         qdr.NewManage(),
+        kubeclientset:    kubeclientset,
+        iotclientset:     iotclientset,
+        projectLister:    projectInformer.Lister(),
+        projectsSynced:   projectInformer.Informer().HasSynced,
+        workqueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "IoTProjects"),
+        manage:           qdr.NewManage(),
+        ephermalCertBase: ephermalCertBase,
     }
 
     klog.Info("Setting up event handlers")
