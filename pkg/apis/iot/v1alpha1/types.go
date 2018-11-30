@@ -25,17 +25,33 @@ type IoTProjectSpec struct {
 
 type DownstreamStrategy struct {
     ExternalDownstreamStrategy *ExternalDownstreamStrategy `json:"externalStrategy"`
+    ProvidedDownstreamStrategy *ProvidedDownstreamStrategy `json:"providedStrategy"`
+}
+
+type ProvidedDownstreamStrategy struct {
+    Namespace        string `json:"namespace"`
+    AddressSpaceName string `json:"addressSpaceName"`
+
+    EndpointMode EndpointMode `json:"endpointMode"`
+    EndpointName string       `json:"endpointName"`
+    PortName     string       `json:"portName"`
+
+    Credentials `json:",inline"`
 }
 
 type ExternalDownstreamStrategy struct {
     Host string `json:"host"`
     Port uint16 `json:"port"`
 
-    Username string `json:"username"`
-    Password string `json:"password"`
+    Credentials `json:",inline"`
 
     TLS         bool   `json:"tls"`
     Certificate []byte `json:"certificate,omitempty"`
+}
+
+type Credentials struct {
+    Username string `json:"username"`
+    Password string `json:"password"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

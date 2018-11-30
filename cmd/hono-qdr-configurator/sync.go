@@ -9,6 +9,7 @@ import (
     "crypto/sha256"
     "encoding/json"
     "fmt"
+    enmassev1 "github.com/enmasseproject/enmasse/pkg/apis/enmasse/v1alpha1"
     "github.com/enmasseproject/enmasse/pkg/apis/iot/v1alpha1"
     "github.com/enmasseproject/enmasse/pkg/qdr"
     "github.com/enmasseproject/enmasse/pkg/util"
@@ -178,7 +179,7 @@ func toMapStringString(v interface{}) (map[string]string, error) {
 
 func (c *Configurator) syncSslProfile(object metav1.Object, certificate []byte) (bool, error) {
 
-    hasCert := len(certificate) > 0;
+    hasCert := certificate != nil && len(certificate) > 0;
     if hasCert && c.ephermalCertBase == "" {
         return false, fmt.Errorf("unable to configure custom certificate, emphermal base directory is not configured")
     }
@@ -216,9 +217,50 @@ func (c *Configurator) syncSslProfile(object metav1.Object, certificate []byte) 
     })
 }
 
-func (c *Configurator) syncProjectExternalDownstream(project *v1alpha1.IoTProject) (bool, error) {
+func (c *Configurator) syncProjectProvidedDownstream(project *v1alpha1.IoTProject) (bool, error) {
 
-    strategy := project.Spec.DownstreamStrategy.ExternalDownstreamStrategy
+    strategy := project.Spec.DownstreamStrategy.ProvidedDownstreamStrategy
+
+    addressSpace, err := c.addressSpaceLister.AddressSpaces(strategy.Namespace).Get(strategy.AddressSpaceName)
+
+    if err != nil {
+        return false, err
+    }
+
+    if !addressSpace.Status.IsReady {
+        return false, fmt.Errorf("addressSpace is not ready yet")
+    }
+
+    for _, status := range addressSpace.Status.EndpointStatus {
+
+        if status.Name == strategy.EndpointName {
+
+            var host string
+            var ports []enmassev1.Port
+
+            switch strategy.EndpointMode {
+            case v1alpha1.Service:
+                host = status.ServiceHost
+                ports = status.ServicePorts
+            case v1alpha1.External:
+                host = status.ExternalHost
+                ports = status.ExternalPorts
+            }
+
+            for _, port := range ports {
+                if port.Name == strategy.PortName {
+                    return c.syncProject(project, host, port.Port, strategy.Credentials, false, nil)
+                }
+            }
+
+        }
+
+    }
+
+    return false, fmt.Errorf("unable to find namespace/addressspace/port/type combination %v/%v/%v/%v", strategy.Namespace, strategy.AddressSpaceName, strategy.PortName, strategy.EndpointMode)
+}
+
+func (c *Configurator) syncProject(project metav1.Object, host string, port uint16, credentials v1alpha1.Credentials, tls bool, certificate []byte) (bool, error) {
 
     connectorName := resourceName(project, "connector")
     sslProfileName := ""
@@ -227,9 +269,9 @@ func (c *Configurator) syncProjectExternalDownstream(project *v1alpha1.IoTProjec
 
     m := util.MultiTool{}
 
-    if strategy.TLS {
+    if tls {
         m.Run(func() (b bool, e error) {
-            return c.syncSslProfile(project, strategy.Certificate)
+            return c.syncSslProfile(project, certificate)
         })
         sslProfileName = resourceName(project, "sslProfile")
     }
@@ -237,11 +279,11 @@ func (c *Configurator) syncProjectExternalDownstream(project *v1alpha1.IoTProjec
     m.Run(func() (b bool, e error) {
         return c.syncConnector(qdr.Connector{
             NamedResource: qdr.NamedResource{Name: connectorName},
-            Host:          strategy.Host,
-            Port:          strconv.Itoa(int(strategy.Port)),
+            Host:          host,
+            Port:          strconv.Itoa(int(port)),
             Role:          "route-container",
-            SASLUsername:  strategy.Username,
-            SASLPassword:  strategy.Password,
+            SASLUsername:  credentials.Username,
+            SASLPassword:  credentials.Password,
             SSLProfile:    sslProfileName,
         })
     })
@@ -283,6 +325,14 @@ func (c *Configurator) syncProjectExternalDownstream(project *v1alpha1.IoTProjec
     })
 
     return m.Return()
+}
+
+func (c *Configurator) syncProjectExternalDownstream(project *v1alpha1.IoTProject) (bool, error) {
+
+    strategy := project.Spec.DownstreamStrategy.ExternalDownstreamStrategy
+
+    return c.syncProject(project, strategy.Host, strategy.Port, strategy.Credentials, strategy.TLS, strategy.Certificate)
+
 }
 
 func (c *Configurator) deleteProject(object metav1.Object) error {

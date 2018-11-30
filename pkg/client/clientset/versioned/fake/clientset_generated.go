@@ -9,6 +9,8 @@ package fake
 
 import (
 	clientset "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned"
+	enmassev1alpha1 "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned/typed/enmasse/v1alpha1"
+	fakeenmassev1alpha1 "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned/typed/enmasse/v1alpha1/fake"
 	iotv1alpha1 "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned/typed/iot/v1alpha1"
 	fakeiotv1alpha1 "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned/typed/iot/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -59,6 +61,16 @@ func (c *Clientset) Discovery() discovery.DiscoveryInterface {
 }
 
 var _ clientset.Interface = &Clientset{}
+
+// EnmasseV1alpha1 retrieves the EnmasseV1alpha1Client
+func (c *Clientset) EnmasseV1alpha1() enmassev1alpha1.EnmasseV1alpha1Interface {
+	return &fakeenmassev1alpha1.FakeEnmasseV1alpha1{Fake: &c.Fake}
+}
+
+// Enmasse retrieves the EnmasseV1alpha1Client
+func (c *Clientset) Enmasse() enmassev1alpha1.EnmasseV1alpha1Interface {
+	return &fakeenmassev1alpha1.FakeEnmasseV1alpha1{Fake: &c.Fake}
+}
 
 // IotV1alpha1 retrieves the IotV1alpha1Client
 func (c *Clientset) IotV1alpha1() iotv1alpha1.IotV1alpha1Interface {

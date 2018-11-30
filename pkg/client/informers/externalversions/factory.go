@@ -13,6 +13,7 @@ import (
 	time "time"
 
 	versioned "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned"
+	enmasse "github.com/enmasseproject/enmasse/pkg/client/informers/externalversions/enmasse"
 	internalinterfaces "github.com/enmasseproject/enmasse/pkg/client/informers/externalversions/internalinterfaces"
 	iot "github.com/enmasseproject/enmasse/pkg/client/informers/externalversions/iot"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -161,7 +162,12 @@ type SharedInformerFactory interface {
 	ForResource(resource schema.GroupVersionResource) (GenericInformer, error)
 	WaitForCacheSync(stopCh <-chan struct{}) map[reflect.Type]bool
 
+	Enmasse() enmasse.Interface
 	Iot() iot.Interface
+}
+
+func (f *sharedInformerFactory) Enmasse() enmasse.Interface {
+	return enmasse.New(f, f.namespace, f.tweakListOptions)
 }
 
 func (f *sharedInformerFactory) Iot() iot.Interface {

@@ -22,9 +22,12 @@ import (
     metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
     clientset "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned"
-    iotscheme "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned/scheme"
-    informers "github.com/enmasseproject/enmasse/pkg/client/informers/externalversions/iot/v1alpha1"
-    listers "github.com/enmasseproject/enmasse/pkg/client/listers/iot/v1alpha1"
+    enmassescheme "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned/scheme"
+    iotinformers "github.com/enmasseproject/enmasse/pkg/client/informers/externalversions/iot/v1alpha1"
+    coreinformers "github.com/enmasseproject/enmasse/pkg/client/informers/externalversions/enmasse/v1alpha1"
+
+    iotlisters "github.com/enmasseproject/enmasse/pkg/client/listers/iot/v1alpha1"
+    corelisters "github.com/enmasseproject/enmasse/pkg/client/listers/enmasse/v1alpha1"
 
     "github.com/enmasseproject/enmasse/pkg/qdr"
 )
@@ -32,11 +35,14 @@ import (
 type Configurator struct {
     ephermalCertBase string
 
-    kubeclientset kubernetes.Interface
-    iotclientset  clientset.Interface
+    kubeclientset    kubernetes.Interface
+    enmasseclientset clientset.Interface
 
-    projectLister  listers.IoTProjectLister
+    projectLister  iotlisters.IoTProjectLister
     projectsSynced cache.InformerSynced
+
+    addressSpaceLister  corelisters.AddressSpaceLister
+    addressSpacesSynced cache.InformerSynced
 
     workqueue workqueue.RateLimitingInterface
 
@@ -46,17 +52,23 @@ type Configurator struct {
 func NewConfigurator(
     kubeclientset kubernetes.Interface,
     iotclientset clientset.Interface,
-    projectInformer informers.IoTProjectInformer,
+    projectInformer iotinformers.IoTProjectInformer,
+    addressSpaceInformer coreinformers.AddressSpaceInformer,
     ephermalCertBase string,
 ) *Configurator {
 
-    utilruntime.Must(iotscheme.AddToScheme(scheme.Scheme))
+    utilruntime.Must(enmassescheme.AddToScheme(scheme.Scheme))
 
     controller := &Configurator{
         kubeclientset:    kubeclientset,
-        iotclientset:     iotclientset,
-        projectLister:    projectInformer.Lister(),
-        projectsSynced:   projectInformer.Informer().HasSynced,
+        enmasseclientset: iotclientset,
+
+        projectLister:  projectInformer.Lister(),
+        projectsSynced: projectInformer.Informer().HasSynced,
+
+        addressSpaceLister:  addressSpaceInformer.Lister(),
+        addressSpacesSynced: addressSpaceInformer.Informer().HasSynced,
+
         workqueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "IoTProjects"),
         manage:           qdr.NewManage(),
         ephermalCertBase: ephermalCertBase,
@@ -84,13 +96,13 @@ func NewConfigurator(
 }
 
 func (c *Configurator) enqueueProject(obj interface{}) {
-    var key string
-    var err error
-    if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
+    if key, err := cache.MetaNamespaceKeyFunc(obj); err != nil {
         runtime.HandleError(err)
         return
+    } else {
+        c.workqueue.AddRateLimited(key)
     }
-    c.workqueue.AddRateLimited(key)
+
 }
 
 // Run main controller
@@ -106,7 +118,7 @@ func (c *Configurator) Run(threadiness int, stopCh <-chan struct{}) error {
     // prepare the caches
 
     klog.Info("Waiting for informer caches to sync")
-    if ok := cache.WaitForCacheSync(stopCh, c.projectsSynced); !ok {
+    if ok := cache.WaitForCacheSync(stopCh, c.projectsSynced, c.addressSpacesSynced); !ok {
         return fmt.Errorf("failed to wait for caches to sync")
     }
 
@@ -225,6 +237,9 @@ func (c *Configurator) syncHandler(key string) error {
     if project.Spec.DownstreamStrategy.ExternalDownstreamStrategy != nil {
         // sync add or update
         _, err = c.syncProjectExternalDownstream(project)
+    } else if project.Spec.DownstreamStrategy.ProvidedDownstreamStrategy != nil {
+        // sync add or update
+        _, err = c.syncProjectProvidedDownstream(project)
     } else {
         klog.Warning("Unknown downstream type. Skipping...")
     }

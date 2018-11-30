@@ -10,7 +10,8 @@ package externalversions
 import (
 	"fmt"
 
-	v1alpha1 "github.com/enmasseproject/enmasse/pkg/apis/iot/v1alpha1"
+	v1alpha1 "github.com/enmasseproject/enmasse/pkg/apis/enmasse/v1alpha1"
+	iotv1alpha1 "github.com/enmasseproject/enmasse/pkg/apis/iot/v1alpha1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )
@@ -41,8 +42,12 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=iot.enmasse.io, Version=v1alpha1
-	case v1alpha1.SchemeGroupVersion.WithResource("iotprojects"):
+	// Group=enmasse.io, Version=v1alpha1
+	case v1alpha1.SchemeGroupVersion.WithResource("addressspaces"):
+		return &genericInformer{resource: resource.GroupResource(), informer: f.Enmasse().V1alpha1().AddressSpaces().Informer()}, nil
+
+		// Group=iot.enmasse.io, Version=v1alpha1
+	case iotv1alpha1.SchemeGroupVersion.WithResource("iotprojects"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Iot().V1alpha1().IoTProjects().Informer()}, nil
 
 	}

@@ -7,7 +7,7 @@ package main
 
 import (
     "flag"
-    iot "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned"
+    enmasse "github.com/enmasseproject/enmasse/pkg/client/clientset/versioned"
     "github.com/enmasseproject/enmasse/pkg/signals"
     "k8s.io/client-go/rest"
     "os"
@@ -61,10 +61,6 @@ func main() {
     stopCh := signals.InstallSignalHandler()
 
     klog.Infof("Starting up...")
-    klog.V(1).Info("Verbosity 1")
-    klog.V(2).Info("Verbosity 2")
-    klog.V(3).Info("Verbosity 3")
-    klog.V(4).Info("Verbosity 4")
 
     if ephermalCertBase != "" {
         fi, err := os.Stat(ephermalCertBase)
@@ -86,20 +82,21 @@ func main() {
         klog.Fatalf("Error building kubernetes client: %v", err.Error())
     }
 
-    iotClient, err := iot.NewForConfig(cfg)
+    enmasseClient, err := enmasse.NewForConfig(cfg)
     if err != nil {
-        klog.Fatalf("Error building IoT project client: %v", err.Error())
+        klog.Fatalf("Error building EnMasse client: %v", err.Error())
     }
 
-    iotInformerFactory := informers.NewSharedInformerFactory(iotClient, time.Second*30)
+    enmasseInformerFactory := informers.NewSharedInformerFactory(enmasseClient, time.Second*30)
 
     configurator := NewConfigurator(
-        kubeClient, iotClient,
-        iotInformerFactory.Iot().V1alpha1().IoTProjects(),
+        kubeClient, enmasseClient,
+        enmasseInformerFactory.Iot().V1alpha1().IoTProjects(),
+        enmasseInformerFactory.Enmasse().V1alpha1().AddressSpaces(),
         ephermalCertBase,
     )
 
-    iotInformerFactory.Start(stopCh)
+    enmasseInformerFactory.Start(stopCh)
 
     if err = configurator.Run(2, stopCh); err != nil {
         klog.Fatalf("Failed running configurator: %v", err.Error())

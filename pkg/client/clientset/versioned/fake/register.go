@@ -8,6 +8,7 @@
 package fake
 
 import (
+	enmassev1alpha1 "github.com/enmasseproject/enmasse/pkg/apis/enmasse/v1alpha1"
 	iotv1alpha1 "github.com/enmasseproject/enmasse/pkg/apis/iot/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -20,6 +21,7 @@ var scheme = runtime.NewScheme()
 var codecs = serializer.NewCodecFactory(scheme)
 var parameterCodec = runtime.NewParameterCodec(scheme)
 var localSchemeBuilder = runtime.SchemeBuilder{
+	enmassev1alpha1.AddToScheme,
 	iotv1alpha1.AddToScheme,
 }
 
