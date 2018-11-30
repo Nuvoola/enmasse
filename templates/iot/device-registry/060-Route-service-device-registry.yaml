@@ -1,0 +1,15 @@
+kind: Route
+apiVersion: v1
+metadata:
+  labels:
+    app: enmasse
+    compnent: hono-service-device-registry
+  name: hono-service-device-registry-https
+spec:
+  port:
+    targetPort: https
+  tls:
+    termination: reencrypt
+  to:
+    kind: Service
+    name: hono-service-device-registry
