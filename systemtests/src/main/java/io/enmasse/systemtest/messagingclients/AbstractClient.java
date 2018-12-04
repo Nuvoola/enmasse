@@ -120,11 +120,10 @@ public abstract class AbstractClient {
             if (validateArgument(arg)) {
                 for (String value : args.getValues(arg)) {
                     arguments.add(arg.command());
-                    try {
-                        Integer.parseInt(value);
-                        arguments.add(value);
-                    } catch (Exception ex) {
+                    if(arg.equals(ClientArgument.USERNAME) || arg.equals(ClientArgument.PASSWORD)) {
                         arguments.add(String.format("\"%s\"", value));
+                    } else {
+                        arguments.add(value);
                     }
                 }
             } else {
